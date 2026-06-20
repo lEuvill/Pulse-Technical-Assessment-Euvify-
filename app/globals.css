@@ -2,7 +2,7 @@
 
 /* ── Cosmic palette ─────────────────────────────────────────── */
   @theme {
-    --color-void:       #05060F;  /* deepest space */
+    --color-void:       #0A0618;  /* deepest space */
     --color-navy:       #0A0E27;  /* base background */
     --color-violet:     #1A1033;  /* gradient partner */
     --color-surface:    rgba(22, 18, 44, 0.55); /* frosted panels */
@@ -114,6 +114,8 @@
   }
 .pulse-me-ring-2 { animation-delay: 1.4s; }
 
+
+
 @keyframes star-twinkle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.72; }
@@ -127,3 +129,31 @@
   0%   { transform: scale(0.5); opacity: 0.9; }
   100% { transform: scale(3.4); opacity: 0; }
 }
+
+
+/* ── Entry gate hero ────────────────────────────────────────── */
+/* Live online users as city lights on the gate globe */
+  .city-light {
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, #fff, #4FE3FF 70%);
+    box-shadow:
+      0 0 3px 1px rgba(79, 227, 255, 0.85),
+      0 0 7px 2px rgba(196, 92, 255, 0.4);
+    animation: star-twinkle 2.6s ease-in-out infinite;
+    animation-delay: var(--delay, 0s);
+  }
+
+  .gate-enter {
+    animation: gate-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes orb-breathe {
+    0%, 100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.9; }
+    50%      { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+  }
+  @keyframes gate-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
