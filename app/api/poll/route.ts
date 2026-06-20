@@ -27,12 +27,14 @@ export async function GET(request: NextRequest) {
   // it reports it is NOT in a call, clear any stale busy (self-heals a busy
   // flag left stuck by a missed end / tab close / server restart).
   const inCall = params.get("inCall") === "1";
-  await prisma.presence.updateMany({
+  const heartbeat = await prisma.presence.updateMany({
     where: { id },
     data: inCall
       ? { lastSeen: new Date(now)}
       : { lastSeen: new Date(now), busy: false },
   });
+
+  const present = heartbeat.count > 0;
 
   // 2) Reap stale presence rows and orphaned signals (independent deletes —
   // no atomicity needed, and avoids transactions over a PgBouncer pooler).
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
   }
 
   const response: PollResponse = {
+    present,
     peers: peers.map((p) => ({
       id: p.id,
       lat: p.lat,

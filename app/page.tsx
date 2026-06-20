@@ -281,6 +281,11 @@ export default function Home() {
         const inCall = c.kind === "connecting" || c.kind === "connected";
         const data = await poll(sessionId, inCall);
         if (!active) return;
+        // Self-heal: if our row was reaped during an interruption, re-join so
+        // we reappear to others instead of silently dropping off the map.
+        if (!data.present && myLocation) {
+            await join(sessionId, myLocation.lat, myLocation.lng);
+          }
         setPeers(data.peers);
         for (const s of data.signals) processSignalRef.current(s);
       } catch {}
@@ -292,7 +297,7 @@ export default function Home() {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [phase, sessionId]);
+  }, [phase, sessionId, myLocation]);
 
   useEffect(() => {
     if (!sessionId || phase !== "live") return;
