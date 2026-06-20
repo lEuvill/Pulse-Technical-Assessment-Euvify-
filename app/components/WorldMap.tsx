@@ -29,6 +29,7 @@ export default function WorldMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
+  const spinRafRef = useRef<number | null>(null);
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -47,26 +48,74 @@ export default function WorldMap({
     let cancelled = false;
     const markers = markersRef.current;
 
-    (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled || !containerRef.current) return;
-      mapboxgl.accessToken = TOKEN;
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: "mapbox://styles/mapbox/dark-v11",
-        // Open centered on the user if we know where they are, else world view.
-        center: me ? [me.lng, me.lat] : [0, 20],
-        zoom: me ? 4 : 1.4,
-        attributionControl: true,
-      });
-      map.on("load", () => {
-        if (!cancelled) setReady(true);
-      });
-      mapRef.current = map;
-    })();
+     (async () => {
+        const mapboxgl = (await import("mapbox-gl")).default;
+        if (cancelled || !containerRef.current) return;
+        mapboxgl.accessToken = TOKEN;
+        const map = new mapboxgl.Map({
+          container: containerRef.current,
+          style: "mapbox://styles/mapbox/dark-v11",
+          projection: "globe", // 3D globe instead of a flat map
+          center: me ? [me.lng, me.lat] : [0, 20],
+          zoom: me ? 2.8 : 1.3,
+          attributionControl: true,
+        });
+        mapRef.current = map;
+
+        const SECONDS_PER_REV = 180;
+        const SPIN_BELOW_ZOOM = 2.5;
+
+        // Pause the idle spin on ANY user interaction (pan, zoom, rotate, pitch),
+        // resume after a short idle. Listen to user-input events only — NOT the
+        // move/zoom events our own setCenter fires, or the loop would pause itself.
+        let userInteracting = false;
+        let interactTimer: ReturnType<typeof setTimeout> | null = null;
+        const pauseSpin = () => {
+          userInteracting = true;
+          if (interactTimer) clearTimeout(interactTimer);
+          interactTimer = setTimeout(() => { userInteracting = false; }, 1200);
+        };
+        map.on("mousedown", pauseSpin);
+        map.on("touchstart", pauseSpin);
+        map.on("wheel", pauseSpin);        // ← the missing one (scroll-zoom)
+        map.on("dragstart", pauseSpin);
+        map.on("zoomstart", pauseSpin);    // ← pinch / +- buttons
+        map.on("rotatestart", pauseSpin);
+        map.on("pitchstart", pauseSpin);
+
+        const DEG_PER_SEC = 360 / SECONDS_PER_REV;
+        let lastTs = 0;
+        const frame = (ts: number) => {
+          if (cancelled) return;
+          const dt = lastTs ? (ts - lastTs) / 1000 : 0;
+          lastTs = ts;
+          if (!userInteracting && map.getZoom() < SPIN_BELOW_ZOOM) {
+            const center = map.getCenter();
+            center.lng -= DEG_PER_SEC * dt;
+            map.setCenter(center);
+          }
+          spinRafRef.current = requestAnimationFrame(frame);
+        };
+        spinRafRef.current = requestAnimationFrame(frame);
+        map.on("load", () => {
+          if (cancelled) return;
+          // Atmosphere: navy lower air → violet upper air, deep-space void, stars.
+          map.setFog({
+            color: "rgb(10, 14, 39)",
+            "high-color": "rgb(60, 30, 120)",
+            "horizon-blend": 0.3,
+            "space-color": "rgb(5, 6, 20)",
+            "star-intensity": 0.55,
+          });
+          setReady(true);
+          
+        });
+      })();
 
     return () => {
       cancelled = true;
+      if (spinRafRef.current) cancelAnimationFrame(spinRafRef.current);
+      markers.forEach((m) => m.remove());
       markers.forEach((m) => m.remove());
       markers.clear();
       meMarkerRef.current?.remove();
@@ -155,7 +204,7 @@ export default function WorldMap({
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="h-full w-full bg-zinc-900" />
+      <div ref={containerRef} className="h-full w-full bg-void" />
 
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
