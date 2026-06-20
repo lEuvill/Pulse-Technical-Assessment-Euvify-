@@ -7,24 +7,27 @@ import type { PeerDot } from "@/lib/types";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "pk.eyJ1IjoicHVsc2UtbWFwIiwiYSI6ImNrMDBkZW1vMDAwMDAwMDAifQ.AAAAAAAAAAAAAAAAAAAAAA";
 
-function dotColor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+ function dotColor(id: string): string {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash * 31 + id.charCodeAt(i)) | 0;
+    }
+    // Cosmic band: cyan (180) → violet/magenta (320), bright for the glow.
+    return `hsl(${180 + (Math.abs(hash) % 140)}, 85%, 66%)`;
   }
-  return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
-}
 
 export default function WorldMap({
   peers,
   me,
   onPeerClick,
   canConnect,
+  meBusy,
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
   onPeerClick: (id: string) => void;
   canConnect: boolean;
+  meBusy: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -138,23 +141,31 @@ export default function WorldMap({
       const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled) return;
       if (!meMarkerRef.current) {
-        const el = document.createElement("div");
-        el.className = "pulse-me";
-        el.title = "You are here";
-        el.innerHTML = `<span class="pulse-me-label">Me</span>📍`;
-        // anchor "bottom" → the pin's tip sits on the exact coordinate.
-        meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
-          .setLngLat([me.lng, me.lat])
-          .addTo(map);
-      } else {
-        meMarkerRef.current.setLngLat([me.lng, me.lat]);
-      }
+          const el = document.createElement("div");
+          el.className = "pulse-me";
+          el.title = "You are here";
+          el.innerHTML =
+            '<span class="pulse-me-core"></span>' +
+            '<span class="pulse-me-ring"></span>' +
+            '<span class="pulse-me-ring pulse-me-ring-2"></span>';
+          meMarkerRef.current = new mapboxgl.Marker({ element: el })
+            .setLngLat([me.lng, me.lat])
+            .addTo(map);
+        } else {
+          meMarkerRef.current.setLngLat([me.lng, me.lat]);
+        }
     })();
 
     return () => {
       cancelled = true;
     };
   }, [me, ready]);
+
+  // Gray my own beacon while I'm in a connection (mirrors how peers see me).
+    useEffect(() => {
+      const el = meMarkerRef.current?.getElement();
+      if (el) el.classList.toggle("is-busy", meBusy);
+    }, [meBusy, me, ready]);
 
   // Reconcile markers whenever the peer list changes (or the map becomes ready).
   useEffect(() => {
@@ -172,20 +183,21 @@ export default function WorldMap({
         seen.add(peer.id);
         let marker = markers.get(peer.id);
         if (!marker) {
-          const el = document.createElement("button");
-          el.className = "pulse-dot";
-          el.style.background = dotColor(peer.id);
-          el.title = "Tap to connect";
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            if (canConnectRef.current) onPeerClickRef.current(peer.id);
-          });
-          marker = new mapboxgl.Marker({ element: el })
-            .setLngLat([peer.lng, peer.lat])
-            .addTo(map);
-          markers.set(peer.id, marker);
-        }
-        marker.getElement().style.opacity = peer.busy ? "0.35" : "1";
+            const el = document.createElement("button");
+            el.className = "pulse-dot";
+            el.style.setProperty("--dot", dotColor(peer.id));
+            el.style.setProperty("--delay", `${Math.random() * 3}s`); // stagger twinkle
+            el.title = "Tap to connect";
+            el.addEventListener("click", (e) => {
+              e.stopPropagation();
+              if (canConnectRef.current) onPeerClickRef.current(peer.id);
+            });
+            marker = new mapboxgl.Marker({ element: el })
+              .setLngLat([peer.lng, peer.lat])
+              .addTo(map);
+            markers.set(peer.id, marker);
+          }
+          marker.getElement().classList.toggle("is-busy", peer.busy);
       }
 
       // Drop markers for peers that went offline / got filtered out.

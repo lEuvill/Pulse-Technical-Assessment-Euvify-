@@ -329,6 +329,7 @@ export default function Home() {
         me={myLocation}
         onPeerClick={requestConnection}
         canConnect={conn.kind === "idle"}
+        meBusy={conn.kind === "connecting" || conn.kind === "connected"}
       />
 
       {notice && (
