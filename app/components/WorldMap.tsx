@@ -35,7 +35,34 @@ export default function WorldMap({
   const spinRafRef = useRef<number | null>(null);
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
+  const [skinId, setSkinId] = useState("midnight");
+    const firstSkin = useRef(true);
 
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      if (firstSkin.current) { firstSkin.current = false; return; } // skip initial
+      const skin = SKINS.find((s) => s.id === skinId);
+      if (skin) map.setStyle(skin.url);
+    }, [skinId, ready]);
+  const SKINS = [
+  { id: "midnight",  name: "Midnight",   url: "mapbox://styles/mapbox/dark-v11" },
+  { id: "satellite", name: "Satellite",  url: "mapbox://styles/mapbox/satellite-streets-v12" },
+  { id: "daylight",  name: "Daylight",   url: "mapbox://styles/mapbox/light-v11" },
+  { id: "streets",   name: "Streets",    url: "mapbox://styles/mapbox/streets-v12" },
+  { id: "terrain",   name: "Terrain",    url: "mapbox://styles/mapbox/outdoors-v12" },
+  { id: "neon",      name: "Neon Night", url: "mapbox://styles/mapbox/navigation-night-v1" },
+  ];
+  function applyGlobeAtmosphere(map: MapboxMap) {
+    map.setProjection("globe");
+    map.setFog({
+      color: "rgb(6, 5, 16)",
+      "high-color": "rgb(12, 0, 41)",
+      "horizon-blend": 0.25,
+      "space-color": "rgb(12, 7, 24)",
+      "star-intensity": 0.65,
+    });
+  }
   // Marker click handlers are bound once, so read the live click handler +
   // connectability through refs (synced in an effect, never during render).
   const onPeerClickRef = useRef(onPeerClick);
@@ -100,19 +127,15 @@ export default function WorldMap({
           spinRafRef.current = requestAnimationFrame(frame);
         };
         spinRafRef.current = requestAnimationFrame(frame);
-        map.on("load", () => {
-          if (cancelled) return;
-          // Atmosphere: navy lower air → violet upper air, deep-space void, stars.
-          map.setFog({
-            color: "rgb(10, 14, 39)",
-            "high-color": "rgb(60, 30, 120)",
-            "horizon-blend": 0.3,
-            "space-color": "rgb(5, 6, 20)",
-            "star-intensity": 0.55,
+
+          // Re-apply globe projection + atmosphere on EVERY style load — the
+          // initial one AND after a skin change (setStyle resets fog/projection).
+          map.on("style.load", () => {
+            if (!cancelled) applyGlobeAtmosphere(map);
           });
-          setReady(true);
-          
-        });
+          map.on("load", () => {
+            if (!cancelled) setReady(true);
+          });
       })();
 
     return () => {
@@ -217,7 +240,28 @@ export default function WorldMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full bg-void" />
-
+      {/* Skin selector */}
+        <details className="group absolute left-4 top-4 z-20">
+          <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border
+  border-white/10 bg-surface px-4 py-2 text-sm text-foreground backdrop-blur-md [&::-webkit-details-marker]:hidden">
+            <span className="h-2 w-2 rounded-full bg-cyan" />
+            Skin
+          </summary>
+          <div className="mt-2 flex w-44 flex-col gap-1 rounded-2xl border border-white/10 bg-surface p-2
+  backdrop-blur-md">
+            {SKINS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSkinId(s.id)}
+                className={`rounded-lg px-3 py-1.5 text-left text-sm transition hover:bg-white/10 ${
+                  skinId === s.id ? "text-cyan" : "text-muted"
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </details>
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
           <p className="max-w-md rounded-lg bg-zinc-800 p-4 text-sm text-zinc-200">
