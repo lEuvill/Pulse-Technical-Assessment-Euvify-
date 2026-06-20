@@ -28,7 +28,7 @@ export default function VideoPanel({
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-black">
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         {/* Remote (full screen) */}
         <video
           ref={remoteRef}
