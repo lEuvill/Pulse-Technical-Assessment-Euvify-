@@ -13,8 +13,8 @@ export async function join(
   });
 }
 
-export async function poll(id: string): Promise<PollResponse> {
-  const res = await fetch(`/api/poll?id=${encodeURIComponent(id)}`, {
+export async function poll(id: string, inCall = false): Promise<PollResponse> {
+  const res = await fetch(`/api/poll?id=${encodeURIComponent(id)}&inCall=${inCall ? "1" : ""}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`poll failed: ${res.status}`);

@@ -277,7 +277,9 @@ export default function Home() {
 
     const tick = async () => {
       try {
-        const data = await poll(sessionId);
+        const c = connRef.current;
+        const inCall = c.kind === "connecting" || c.kind === "connected";
+        const data = await poll(sessionId, inCall);
         if (!active) return;
         setPeers(data.peers);
         for (const s of data.signals) processSignalRef.current(s);

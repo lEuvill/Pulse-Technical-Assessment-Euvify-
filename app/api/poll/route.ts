@@ -22,9 +22,16 @@ export async function GET(request: NextRequest) {
   const signalCutoff = new Date(now - SIGNAL_TTL_MS);
 
   // 1) Heartbeat — refresh lastSeen for the caller.
+  // Also reconcile the busy
+  // flag: the client is the source of truth for "am I in a connection", so if
+  // it reports it is NOT in a call, clear any stale busy (self-heals a busy
+  // flag left stuck by a missed end / tab close / server restart).
+  const inCall = params.get("inCall") === "1";
   await prisma.presence.updateMany({
     where: { id },
-    data: { lastSeen: new Date(now) },
+    data: inCall
+      ? { lastSeen: new Date(now)}
+      : { lastSeen: new Date(now), busy: false },
   });
 
   // 2) Reap stale presence rows and orphaned signals (independent deletes —
