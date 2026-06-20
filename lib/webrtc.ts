@@ -107,7 +107,7 @@ export class PeerSession {
     this.ignoreOffer = !this.polite && offerCollision;
     if (this.ignoreOffer) return;
     
-    await this.pc.setRemoteDescription(desc);
+    await this.pc.setRemoteDescription(desc); //Swap the two lines so queued candidates are added only after the remote description exists
     await this.flushPendingCandidates();
     
     if (desc.type === "offer") {
@@ -130,7 +130,7 @@ export class PeerSession {
   }
 
   sendChat(text: string) {
-    this.safeSend({ t: "msg", text });
+    this.safeSend({ t: "chat", text }); //msg.t === "chat" branch fires → onChat → page.tsx's addMessage(false, text) renders the incoming message.
   }
 
   sendControl(ctrl: PeerControl) {
