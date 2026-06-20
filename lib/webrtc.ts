@@ -106,9 +106,10 @@ export class PeerSession {
       (this.makingOffer || this.pc.signalingState !== "stable");
     this.ignoreOffer = !this.polite && offerCollision;
     if (this.ignoreOffer) return;
-
-    await this.flushPendingCandidates();
+    
     await this.pc.setRemoteDescription(desc);
+    await this.flushPendingCandidates();
+    
     if (desc.type === "offer") {
       await this.pc.setLocalDescription();
       if (this.pc.localDescription) {
