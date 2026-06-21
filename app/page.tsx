@@ -1,5 +1,5 @@
 "use client";
-
+import TicTacToe from "./components/Games/TicTacToe";
 import { useEffect, useRef, useState } from "react";
 import EntryGate from "./components/EntryGate";
 import WorldMap from "./components/WorldMap";
@@ -11,6 +11,9 @@ import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
 import type { ActivityAction } from "@/lib/webrtc";
+
+
+
 
 const ACTIVITIES = [
     { id: "ttt",    name: "Tic-Tac-Toe",      emoji: "⭕", desc: "Quick game" },
@@ -39,6 +42,8 @@ type VideoState = "none" | "requesting" | "incoming" | "active";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export default function Home() {
+  const [gameMsg, setGameMsg] = useState<unknown>(null);
+  const [myMark, setMyMark] = useState<"X" | "O">("X");
   const [phase, setPhase] = useState<"gate" | "live">("gate");
   const [sessionId] = useState(() => crypto.randomUUID());
   const [peers, setPeers] = useState<PeerDot[]>([]);
@@ -73,11 +78,13 @@ export default function Home() {
       }
     }
     function inviteActivity(id: string) {
+      setMyMark("X");
       if (activityRef.current.kind !== "none" || !peerRef.current) return;
       setActivity({ kind: "inviting", id });
       peerRef.current.sendActivity("invite", id);
     }
     function acceptActivity() {
+      setMyMark("O");
       const a = activityRef.current;
       if (a.kind !== "incoming" || !peerRef.current) return;
       peerRef.current.sendActivity("accept", a.id);
@@ -94,6 +101,7 @@ export default function Home() {
       if (a.kind === "none") return;
       peerRef.current?.sendActivity("end", a.id);
       setActivity({ kind: "none" });
+      setGameMsg(null);
     }
 
 
@@ -135,6 +143,7 @@ export default function Home() {
     setMessages([]);
     setConn({ kind: "idle" });
     if (message) showNotice(message);
+    setGameMsg(null);
   }
 
   function startPeer(peerId: string, initiator: boolean) {
@@ -142,6 +151,7 @@ export default function Home() {
       onSignal: (type: DescType, payload: string) => {
         void sendSignal(sessionId, peerId, type, payload);
       },
+      onGame: (data) => setGameMsg(data),
       onActivity: (action, id) => handleActivity(action, id),
       onChat: (text) => addMessage(false, text),
       onControl: (ctrl) => handleControl(ctrl),
@@ -389,6 +399,14 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 overflow-hidden">
+      {activity.kind === "active" && activity.id === "ttt" && (
+          <TicTacToe
+            send={(d) => peerRef.current?.sendGame(d)}
+            incoming={gameMsg}
+            myMark={myMark}
+            onClose={endActivity}
+          />
+        )}
       <WorldMap
         peers={peers}
         me={myLocation}

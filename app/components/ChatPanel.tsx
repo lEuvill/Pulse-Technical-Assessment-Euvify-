@@ -109,9 +109,7 @@ export default function ChatPanel({
                 <span className="font-medium text-emerald-300">🎮 In {actName(activity.id)}</span>
                 <button onClick={onEndActivity} className="rounded-full bg-red-500 px-3 py-1 text-xs text-white">End</button>
               </div>
-              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500">
-                {actName(activity.id)} goes here
-              </div>
+              
             </div>
           )}
 

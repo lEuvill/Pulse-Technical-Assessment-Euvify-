@@ -13,6 +13,7 @@ export type ActivityAction =
   | "end";
 
 interface PeerCallbacks {
+  onGame: (data: unknown) => void;
   onSignal: (type: DescType, payload: string) => void;
   onChat: (text: string) => void;
   onControl: (ctrl: PeerControl) => void;
@@ -89,11 +90,13 @@ export class PeerSession {
           this.cb.onChat(msg.text);
         } else if (msg.t === "ctrl" && typeof msg.ctrl === "string") {
           this.cb.onControl(msg.ctrl as PeerControl);
-        } else if (msg.t === "activity" && typeof msg.action === "string") {
-            this.cb.onActivity(
-              msg.action as ActivityAction,
-              typeof msg.activity === "string" ? msg.activity : "",
-            );
+        } else if (msg.t === "game") {
+          this.cb.onGame(msg.data);
+        }else if (msg.t === "activity" && typeof msg.action === "string") {
+          this.cb.onActivity(
+            msg.action as ActivityAction,
+            typeof msg.activity === "string" ? msg.activity : "",
+          );
           }
       } catch {}
     };
@@ -154,7 +157,9 @@ export class PeerSession {
   sendActivity(action: ActivityAction, activity: string) {
       this.safeSend({ t: "activity", action, activity });
     }
-
+  sendGame(data: unknown) {
+      this.safeSend({ t: "game", data });
+    }
   private safeSend(obj: unknown) {
     if (this.dc && this.dc.readyState === "open") {
       this.dc.send(JSON.stringify(obj));
