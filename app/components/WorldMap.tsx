@@ -29,6 +29,14 @@ export default function WorldMap({
   canConnect: boolean;
   meBusy: boolean;
 }) {
+  const keysRef = useRef<Set<string>>(new Set());
+  const flyRafRef = useRef<number | null>(null);
+  const flyingRef = useRef(false);
+  const shipRef = useRef<HTMLDivElement>(null);
+  const [shipMode, setShipMode] = useState(false);
+  const shipModeRef = useRef(false);
+  useEffect(() => { shipModeRef.current = shipMode; }, [shipMode]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
@@ -41,6 +49,7 @@ export default function WorldMap({
     useEffect(() => {
       const map = mapRef.current;
       if (!map || !ready) return;
+      
       if (firstSkin.current) { firstSkin.current = false; return; } // skip initial
       const skin = SKINS.find((s) => s.id === skinId);
       if (skin) map.setStyle(skin.url);
@@ -53,6 +62,18 @@ export default function WorldMap({
   { id: "terrain",   name: "Terrain",    url: "mapbox://styles/mapbox/outdoors-v12" },
   { id: "neon",      name: "Neon Night", url: "mapbox://styles/mapbox/navigation-night-v1" },
   ];
+  useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      if (shipMode) {
+        // Low-angle orbital horizon view
+        map.easeTo({ pitch: 72, zoom: Math.max(map.getZoom(), 4.2), duration: 1200 });
+      } else {
+        map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+        keysRef.current.clear();
+        flyingRef.current = false;
+      }
+    }, [shipMode, ready]);
   function applyGlobeAtmosphere(map: MapboxMap) {
     map.setProjection("globe");
     map.setFog({
@@ -119,7 +140,7 @@ export default function WorldMap({
           if (cancelled) return;
           const dt = lastTs ? (ts - lastTs) / 1000 : 0;
           lastTs = ts;
-          if (!userInteracting && map.getZoom() < SPIN_BELOW_ZOOM) {
+          if (!userInteracting && !flyingRef.current && !shipModeRef.current && map.getZoom() < SPIN_BELOW_ZOOM) {
             const center = map.getCenter();
             center.lng -= DEG_PER_SEC * dt;
             map.setCenter(center);
@@ -237,8 +258,111 @@ export default function WorldMap({
     };
   }, [peers, ready]);
 
+
+useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      map.keyboard.disable(); // we handle arrows
+      const keys = keysRef.current;
+      const CONTROLS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "s"];
+      const norm = (k: string) => (k.length === 1 ? k.toLowerCase() : k);
+      const isTyping = () => {
+          const el = document.activeElement;
+          return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+        };
+      const onKeyDown = (e: KeyboardEvent) => {
+        const k = norm(e.key);
+        if (!shipModeRef.current || !CONTROLS.includes(k) || isTyping()) return;
+        keys.add(k);
+        e.preventDefault();
+      };
+      const onKeyUp = (e: KeyboardEvent) => keys.delete(norm(e.key));
+      window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("keyup", onKeyUp);
+
+      const THRUST = 7;
+        const TURN = 1.2;
+        const ZOOM = 0.03;
+        const TILT = 58; // lays the ship onto the tilted ground plane
+        const fly = () => {
+          const active = shipModeRef.current && keys.size > 0;
+          flyingRef.current = active;
+          if (active) {
+            if (keys.has("ArrowUp")) map.panBy([0, -THRUST], { duration: 0 });
+            if (keys.has("ArrowDown")) map.panBy([0, THRUST], { duration: 0 });
+            if (keys.has("ArrowLeft")) map.setBearing(map.getBearing() - TURN);
+            if (keys.has("ArrowRight")) map.setBearing(map.getBearing() + TURN);
+            if (keys.has("w")) map.setZoom(Math.max(3, map.getZoom() - ZOOM));   // ascend → zoom out
+            if (keys.has("s")) map.setZoom(Math.min(18, map.getZoom() + ZOOM));   // descend → zoom in
+            const bank = (keys.has("ArrowLeft") ? -14 : 0) + (keys.has("ArrowRight") ? 14 : 0);
+            if (shipRef.current) {
+                shipRef.current.style.transform = `translate(-50%, -50%) perspective(500px) rotateX(${TILT}deg) rotate(${bank}deg)`;
+                shipRef.current.style.setProperty("--thrust", keys.has("ArrowUp") ? "1.7" : "1");  // ← here
+              }
+            } else if (shipRef.current) {
+              shipRef.current.style.transform = `translate(-50%, -50%) perspective(500px) rotateX(${TILT}deg) rotate(0deg)`;
+              shipRef.current.style.setProperty("--thrust", "1");  // ← reset when idle
+            }
+          flyRafRef.current = requestAnimationFrame(fly);
+        };
+        flyRafRef.current = requestAnimationFrame(fly); 
+      return () => {
+        window.removeEventListener("keydown", onKeyDown);
+        window.removeEventListener("keyup", onKeyUp);
+        if (flyRafRef.current) cancelAnimationFrame(flyRafRef.current);
+        keys.clear();
+      };
+    }, [ready]);
+
   return (
     <div className="absolute inset-0">
+      {/* Spaceship — fly the globe with arrow keys */}
+        {shipMode && (
+          <div
+            ref={shipRef}
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 z-10"
+            style={{
+                transform: "translate(-50%, -50%) perspective(500px) rotateX(58deg)",
+                transition: "transform 0.15s ease-out",
+              }}
+          >
+            <svg width="40" height="62" viewBox="0 0 40 62"
+  className="drop-shadow-[0_0_12px_rgba(79,227,255,0.9)]">
+                <defs>
+                  <linearGradient id="shipGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#9fd8ff" />
+                    <stop offset="1" stopColor="#c45cff" />
+                  </linearGradient>
+                  <linearGradient id="flameGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#ffffff" />
+                    <stop offset="0.35" stopColor="#4FE3FF" />
+                    <stop offset="1" stopColor="#C45CFF" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path className="ship-flame" d="M13 32 L20 58 L27 32 Z" fill="url(#flameGrad)" />
+                <path d="M20 4 L31 36 L20 28 L9 36 Z" fill="url(#shipGrad)" stroke="#dff1ff"
+  strokeWidth="1.5" />
+              </svg>
+            
+          </div>
+        )}
+
+        <button
+          onClick={() => setShipMode((s) => !s)}
+          className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full border
+  border-white/10 bg-surface px-5 py-2 text-sm text-foreground backdrop-blur-md transition
+  hover:border-cyan/50"
+        >
+          {shipMode ? "Exit flight" : "🚀 Fly the globe"}
+        </button>
+
+        {shipMode && (
+          <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2
+  rounded-full bg-surface px-4 py-1.5 text-xs text-muted backdrop-blur-md">
+            ↑↓ thrust · ← → turn W -UP S -Down altitude
+          </div>
+        )}
       <div ref={containerRef} className="h-full w-full bg-void" />
       {/* Skin selector */}
         <details className="group absolute left-4 top-4 z-20">
@@ -260,6 +384,7 @@ export default function WorldMap({
                 {s.name}
               </button>
             ))}
+            
           </div>
         </details>
       {!TOKEN && (
