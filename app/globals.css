@@ -157,3 +157,74 @@
     from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+
+
+  /* Meteor: a long, flashy streak that falls from a random edge into a new user */
+  .meteor { position: relative; width: 0; height: 0; pointer-events: none; }
+
+  .meteor-streak {
+    position: absolute;
+    width: 6px; height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, #fff, #9fd8ff 60%);
+    box-shadow:
+      0 0 10px 4px rgba(150, 210, 255, 0.95),
+      0 0 24px 9px rgba(120, 160, 255, 0.6),
+      0 0 40px 16px rgba(196, 92, 255, 0.4);
+    animation: meteor-fall var(--dur, 2.5s) linear forwards;
+  }
+  .meteor-streak::before { /* the long glowing tail */
+    content: "";
+    position: absolute;
+    left: 3px; top: 2px;
+    width: 150px; height: 3px;
+    transform-origin: left center;
+    transform: rotate(var(--tail, -55deg));
+    background: linear-gradient(90deg,
+      rgba(255,255,255,0.95),
+      rgba(150,210,255,0.5) 40%,
+      rgba(196,92,255,0.15) 75%,
+      transparent);
+    filter: blur(0.4px);
+  }
+
+  .meteor-flash { /* impact ring 1 */
+    position: absolute;
+    width: 12px; height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 9999px;
+    border: 2px solid rgba(150, 210, 255, 0.95);
+    transform: scale(0); opacity: 0;
+    animation: meteor-impact 0.9s ease-out var(--flash, 2.3s) forwards;
+  }
+  .meteor-flash::after { /* impact ring 2 (violet, slightly delayed) */
+    content: "";
+    position: absolute; inset: -5px;
+    border-radius: 9999px;
+    border: 2px solid rgba(196, 92, 255, 0.75);
+    animation: meteor-impact 1s ease-out var(--flash2, 2.4s) forwards;
+  }
+
+  .meteor-arc-comet {
+      position: absolute;
+      top: 0; left: 0;
+      width: 7px; height: 7px;
+      margin: -3.5px 0 0 -3.5px;
+      border-radius: 9999px;
+      background: radial-gradient(circle, #fff, #c9a8ff 60%);
+      box-shadow: 0 0 10px 4px rgba(196, 92, 255, 0.9), 0 0 22px 9px rgba(150, 210, 255, 0.5);
+      will-change: transform, opacity;
+    }
+
+  @keyframes meteor-fall {
+    0%   { transform: translate(var(--mx, 80px), var(--my, -120px)); opacity: 0; }
+    4%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translate(0, 0); opacity: 0; }
+  }
+  @keyframes meteor-impact {
+    0%   { transform: scale(0.3); opacity: 1; }
+    100% { transform: scale(8);   opacity: 0; }
+  }

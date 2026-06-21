@@ -7,11 +7,19 @@
 
   const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
-  export default function GlobePreview() {
+  export default function GlobePreview({
+    onArrival,
+    projectRef,
+  }: {
+    onArrival?: (lng: number, lat: number) => void;
+    projectRef?: { current: ((lng: number, lat: number) => { x: number; y: number }) | null };
+  }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapboxMap | null>(null);
     const markersRef = useRef<Map<string, Marker>>(new Map());
     const spinRafRef = useRef<number | null>(null);
+    const onArrivalRef = useRef(onArrival);
+    useEffect(() => { onArrivalRef.current = onArrival; });
 
     useEffect(() => {
       if (!TOKEN) return;
@@ -58,8 +66,12 @@
           interactive: false,
         });
         mapRef.current = map;
-        
-        
+          if (projectRef) {
+            projectRef.current = (lng, lat) => {
+              const pt = map.project([lng, lat]);
+              return { x: pt.x, y: pt.y };
+            };
+            }
         ro = new ResizeObserver(() => map.resize());
         ro.observe(container);
 
@@ -103,7 +115,9 @@
           };
           spinRafRef.current = requestAnimationFrame(frame);
         });
-
+        
+        
+        let firstTick = true;
         const tick = async () => {
           try {
             const data = await poll(ephemeralId);
@@ -112,6 +126,7 @@
             for (const p of data.peers) {
               seen.add(p.id);
               if (!markers.has(p.id)) {
+                if (!firstTick) onArrivalRef.current?.(p.lng, p.lat);
                 const el = document.createElement("div");
                 el.className = "city-light";
                 el.style.setProperty("--delay", `${Math.random() * 2.5}s`);
@@ -124,6 +139,7 @@
             for (const [id, m] of markers) {
               if (!seen.has(id)) { m.remove(); markers.delete(id); }
             }
+            firstTick = false; // subsequent new peers are real arrivals
           } catch {}
           if (!cancelled) pollTimer = setTimeout(tick, 4000);
         };
