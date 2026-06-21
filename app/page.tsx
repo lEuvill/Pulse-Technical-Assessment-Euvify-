@@ -10,6 +10,22 @@ import { join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
+import type { ActivityAction } from "@/lib/webrtc";
+
+const ACTIVITIES = [
+    { id: "ttt",    name: "Tic-Tac-Toe",      emoji: "⭕", desc: "Quick game" },
+    { id: "wyr",    name: "Would You Rather", emoji: "🤔", desc: "Icebreaker" },
+    { id: "20q",    name: "20 Questions",     emoji: "❓", desc: "Guessing game" },
+    { id: "doodle", name: "Doodle Together",  emoji: "🎨", desc: "Shared canvas" },
+  ];
+
+type Activity =
+  | { kind: "none" }
+  | { kind: "inviting"; id: string }
+  | { kind: "incoming"; id: string }
+  | { kind: "active"; id: string };
+
+
 
 type Conn =
   | { kind: "idle" }
@@ -33,6 +49,53 @@ export default function Home() {
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
+
+  const [activity, _setActivity] = useState<Activity>({ kind: "none" });
+  const activityRef = useRef<Activity>(activity);
+  const setActivity = (a: Activity) => { activityRef.current = a; _setActivity(a); };
+
+  function handleActivity(action: ActivityAction, id: string) {
+      switch (action) {
+        case "invite":
+          if (activityRef.current.kind === "none") setActivity({ kind: "incoming", id });
+          else peerRef.current?.sendActivity("decline", id);
+          break;
+        case "accept":
+          if (activityRef.current.kind === "inviting" && activityRef.current.id === id)
+            setActivity({ kind: "active", id });
+          break;
+        case "decline":
+          if (activityRef.current.kind === "inviting") { setActivity({ kind: "none" }); showNotice("Activity declined."); }
+          break;
+        case "end":
+          if (activityRef.current.kind !== "none") setActivity({ kind: "none" });
+          break;
+      }
+    }
+    function inviteActivity(id: string) {
+      if (activityRef.current.kind !== "none" || !peerRef.current) return;
+      setActivity({ kind: "inviting", id });
+      peerRef.current.sendActivity("invite", id);
+    }
+    function acceptActivity() {
+      const a = activityRef.current;
+      if (a.kind !== "incoming" || !peerRef.current) return;
+      peerRef.current.sendActivity("accept", a.id);
+      setActivity({ kind: "active", id: a.id });
+    }
+    function declineActivity() {
+      const a = activityRef.current;
+      if (a.kind !== "incoming") return;
+      peerRef.current?.sendActivity("decline", a.id);
+      setActivity({ kind: "none" });
+    }
+    function endActivity() { // also used to cancel an invite
+      const a = activityRef.current;
+      if (a.kind === "none") return;
+      peerRef.current?.sendActivity("end", a.id);
+      setActivity({ kind: "none" });
+    }
+
 
   const [conn, _setConn] = useState<Conn>({ kind: "idle" });
   const connRef = useRef<Conn>(conn);
@@ -67,6 +130,7 @@ export default function Home() {
     peerRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
+    setActivity({ kind: "none" });
     setVideo("none");
     setMessages([]);
     setConn({ kind: "idle" });
@@ -78,6 +142,7 @@ export default function Home() {
       onSignal: (type: DescType, payload: string) => {
         void sendSignal(sessionId, peerId, type, payload);
       },
+      onActivity: (action, id) => handleActivity(action, id),
       onChat: (text) => addMessage(false, text),
       onControl: (ctrl) => handleControl(ctrl),
       onRemoteStream: (stream) => setRemoteStream(stream),
@@ -362,6 +427,12 @@ export default function Home() {
 
       {inChat && (
         <ChatPanel
+          activities={ACTIVITIES}
+          activity={activity}
+          onInvite={inviteActivity}
+          onAcceptActivity={acceptActivity}
+          onDeclineActivity={declineActivity}
+          onEndActivity={endActivity}
           messages={messages}
           connected={conn.kind === "connected"}
           videoBusy={video !== "none"}

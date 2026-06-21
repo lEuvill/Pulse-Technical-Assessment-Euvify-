@@ -5,6 +5,13 @@ export type PeerControl =
   | "video-decline"
   | "video-end";
 
+
+export type ActivityAction = 
+  | "invite" 
+  | "accept" 
+  | "decline" 
+  | "end";
+
 interface PeerCallbacks {
   onSignal: (type: DescType, payload: string) => void;
   onChat: (text: string) => void;
@@ -12,6 +19,7 @@ interface PeerCallbacks {
   onRemoteStream: (stream: MediaStream | null) => void;
   onConnectionState: (state: RTCPeerConnectionState) => void;
   onChannelOpen: () => void;
+  onActivity: (action: ActivityAction, activity: string) => void;
 }
 
 const ICE_CONFIG: RTCConfiguration = {
@@ -63,6 +71,7 @@ export class PeerSession {
     if (initiator) {
       this.dc = this.pc.createDataChannel("chat");
       this.wireDataChannel(this.dc);
+      
     } else {
       this.pc.ondatachannel = (e) => {
         this.dc = e.channel;
@@ -80,7 +89,12 @@ export class PeerSession {
           this.cb.onChat(msg.text);
         } else if (msg.t === "ctrl" && typeof msg.ctrl === "string") {
           this.cb.onControl(msg.ctrl as PeerControl);
-        }
+        } else if (msg.t === "activity" && typeof msg.action === "string") {
+            this.cb.onActivity(
+              msg.action as ActivityAction,
+              typeof msg.activity === "string" ? msg.activity : "",
+            );
+          }
       } catch {}
     };
   }
@@ -136,6 +150,10 @@ export class PeerSession {
   sendControl(ctrl: PeerControl) {
     this.safeSend({ t: "ctrl", ctrl });
   }
+
+  sendActivity(action: ActivityAction, activity: string) {
+      this.safeSend({ t: "activity", action, activity });
+    }
 
   private safeSend(obj: unknown) {
     if (this.dc && this.dc.readyState === "open") {

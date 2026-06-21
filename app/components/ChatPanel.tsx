@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+
+
 export interface ChatMessage {
   id: number;
   mine: boolean;
@@ -15,7 +17,24 @@ export default function ChatPanel({
   onSend,
   onStartVideo,
   onEnd,
+  activities,
+  activity,
+  onInvite,
+  onAcceptActivity,
+  onDeclineActivity,
+  onEndActivity,
+  
 }: {
+  activities: { id: string; name: string; emoji: string; desc: string }[];
+  activity:
+    | { kind: "none" }
+    | { kind: "inviting"; id: string }
+    | { kind: "incoming"; id: string }
+    | { kind: "active"; id: string };
+  onInvite: (id: string) => void;
+  onAcceptActivity: () => void;
+  onDeclineActivity: () => void;
+  onEndActivity: () => void;
   messages: ChatMessage[];
   connected: boolean;
   videoBusy: boolean;
@@ -23,6 +42,7 @@ export default function ChatPanel({
   onStartVideo: () => void;
   onEnd: () => void;
 }) {
+  const actName = (id: string) => activities.find((a) => a.id === id)?.name ?? "activity";
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -63,7 +83,56 @@ export default function ChatPanel({
           </button>
         </div>
       </header>
+{/* ── Activities ───────────────────────────── */}
+          {connected && activity.kind === "incoming" && (
+            <div className="border-b border-zinc-800 bg-zinc-900/60 p-3 text-sm">
+              <p className="mb-2 text-zinc-200">
+                Stranger invites you to <b>{actName(activity.id)}</b>
+              </p>
+              <div className="flex gap-2">
+                <button onClick={onAcceptActivity} className="rounded-full bg-emerald-400 px-3 py-1 text-xs font-medium text-zinc-950">Join</button>
+                <button onClick={onDeclineActivity} className="rounded-full bg-zinc-700 px-3 py-1 text-xs">Decline</button>
+              </div>
+            </div>
+          )}
 
+          {connected && activity.kind === "inviting" && (
+            <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/60 p-3 text-sm text-zinc-300">
+              <span>Waiting for stranger to join <b>{actName(activity.id)}</b>…</span>
+              <button onClick={onEndActivity} className="rounded-full bg-zinc-700 px-3 py-1 text-xs">Cancel</button>
+            </div>
+          )}
+
+          {connected && activity.kind === "active" && (
+            <div className="border-b border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium text-emerald-300">🎮 In {actName(activity.id)}</span>
+                <button onClick={onEndActivity} className="rounded-full bg-red-500 px-3 py-1 text-xs text-white">End</button>
+              </div>
+              <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-zinc-700 text-xs text-zinc-500">
+                {actName(activity.id)} goes here
+              </div>
+            </div>
+          )}
+
+          {connected && activity.kind === "none" && (
+            <div className="border-b border-zinc-800 p-3">
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Do something together</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {activities.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => onInvite(a.id)}
+                    className="flex shrink-0 flex-col items-start rounded-xl border border-zinc-700 px-3 py-2 text-left transition hover:border-emerald-400/60"
+                  >
+                    <span className="text-lg">{a.emoji}</span>
+                    <span className="text-sm text-zinc-100">{a.name}</span>
+                    <span className="text-[10px] text-zinc-500">{a.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-zinc-500">
