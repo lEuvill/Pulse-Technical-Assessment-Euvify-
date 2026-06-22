@@ -22,13 +22,24 @@ export default function WorldMap({
   onPeerClick,
   canConnect,
   meBusy,
+    target,
+    onReachTarget,
 }: {
+  target?: { name: string; lat: number; lng: number } | null;
+  onReachTarget?: () => void;
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
   onPeerClick: (id: string) => void;
   canConnect: boolean;
   meBusy: boolean;
 }) {
+  const targetRef = useRef(target);
+  const onReachRef = useRef(onReachTarget);
+  const reachedRef = useRef(false);
+  const questRingRef = useRef<Marker | null>(null);
+  useEffect(() => { targetRef.current = target; reachedRef.current = false; }, [target]);
+  useEffect(() => { onReachRef.current = onReachTarget; });
+
   const keysRef = useRef<Set<string>>(new Set());
   const flyRafRef = useRef<number | null>(null);
   const flyingRef = useRef(false);
@@ -44,16 +55,16 @@ export default function WorldMap({
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
   const [skinId, setSkinId] = useState("midnight");
-    const firstSkin = useRef(true);
+  const firstSkin = useRef(true);
 
-    useEffect(() => {
-      const map = mapRef.current;
-      if (!map || !ready) return;
-      
-      if (firstSkin.current) { firstSkin.current = false; return; } // skip initial
-      const skin = SKINS.find((s) => s.id === skinId);
-      if (skin) map.setStyle(skin.url);
-    }, [skinId, ready]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    
+    if (firstSkin.current) { firstSkin.current = false; return; } // skip initial
+    const skin = SKINS.find((s) => s.id === skinId);
+    if (skin) map.setStyle(skin.url);
+  }, [skinId, ready]);
   const SKINS = [
   { id: "midnight",  name: "Midnight",   url: "mapbox://styles/mapbox/dark-v11" },
   { id: "satellite", name: "Satellite",  url: "mapbox://styles/mapbox/satellite-streets-v12" },
@@ -62,6 +73,7 @@ export default function WorldMap({
   { id: "terrain",   name: "Terrain",    url: "mapbox://styles/mapbox/outdoors-v12" },
   { id: "neon",      name: "Neon Night", url: "mapbox://styles/mapbox/navigation-night-v1" },
   ];
+  
   useEffect(() => {
       const map = mapRef.current;
       if (!map || !ready) return;
@@ -74,6 +86,14 @@ export default function WorldMap({
         flyingRef.current = false;
       }
     }, [shipMode, ready]);
+
+  function distKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+    const R = 6371, r = (d: number) => (d * Math.PI) / 180;
+    const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  
   function applyGlobeAtmosphere(map: MapboxMap) {
     map.setProjection("globe");
     map.setFog({
@@ -175,6 +195,34 @@ export default function WorldMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready || !target) return;
+      let cancelled = false;
+      (async () => {
+        const mapboxgl = (await import("mapbox-gl")).default;
+        if (cancelled) return;
+        const el = document.createElement("div");
+        el.className = "quest-beacon";   
+        el.style.display = "none";       // hidden until you're in range
+        questRingRef.current = new mapboxgl.Marker({ element: el }).setLngLat([target.lng, target.lat]).addTo(map);
+      })();
+      return () => { cancelled = true; questRingRef.current?.remove(); questRingRef.current = null; };
+    }, [target, ready]);
+
+  useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      if (target) {
+        setShipMode(true);
+        map.scrollZoom.disable();                         // no mouse zoom during quest
+        map.easeTo({ pitch: 72, zoom: 3.4, duration: 1000 }); // fixed, locked altitude
+      } else {
+        map.scrollZoom.enable();
+        setShipMode(false);
+      }
+    }, [target, ready]);
+
   // Show / move the user's own "you are here" pin.
   useEffect(() => {
     const map = mapRef.current;
@@ -262,6 +310,7 @@ export default function WorldMap({
 useEffect(() => {
       const map = mapRef.current;
       if (!map || !ready) return;
+      
       map.keyboard.disable(); // we handle arrows
       const keys = keysRef.current;
       const CONTROLS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "s"];
@@ -279,7 +328,7 @@ useEffect(() => {
       const onKeyUp = (e: KeyboardEvent) => keys.delete(norm(e.key));
       window.addEventListener("keydown", onKeyDown);
       window.addEventListener("keyup", onKeyUp);
-
+       
       const THRUST = 7;
         const TURN = 1.2;
         const ZOOM = 0.03;
@@ -288,12 +337,15 @@ useEffect(() => {
           const active = shipModeRef.current && keys.size > 0;
           flyingRef.current = active;
           if (active) {
+            if (!targetRef.current) {
+              if (keys.has("w")) map.setZoom(Math.max(3, map.getZoom() - ZOOM));
+              if (keys.has("s")) map.setZoom(Math.min(18, map.getZoom() + ZOOM));
+            }
             if (keys.has("ArrowUp")) map.panBy([0, -THRUST], { duration: 0 });
             if (keys.has("ArrowDown")) map.panBy([0, THRUST], { duration: 0 });
             if (keys.has("ArrowLeft")) map.setBearing(map.getBearing() - TURN);
             if (keys.has("ArrowRight")) map.setBearing(map.getBearing() + TURN);
-            if (keys.has("w")) map.setZoom(Math.max(3, map.getZoom() - ZOOM));   // ascend → zoom out
-            if (keys.has("s")) map.setZoom(Math.min(18, map.getZoom() + ZOOM));   // descend → zoom in
+           
             const bank = (keys.has("ArrowLeft") ? -14 : 0) + (keys.has("ArrowRight") ? 14 : 0);
             if (shipRef.current) {
                 shipRef.current.style.transform = `translate(-50%, -50%) perspective(500px) rotateX(${TILT}deg) rotate(${bank}deg)`;
@@ -301,7 +353,25 @@ useEffect(() => {
               }
             } else if (shipRef.current) {
               shipRef.current.style.transform = `translate(-50%, -50%) perspective(500px) rotateX(${TILT}deg) rotate(0deg)`;
-              shipRef.current.style.setProperty("--thrust", "1");  // ← reset when idle
+              shipRef.current.style.setProperty("--thrust", "1");  //  reset when idle
+            }
+             // Beacon: only visible in range; win when the ship touches it
+            const t = targetRef.current;
+            const beaconEl = questRingRef.current?.getElement();
+            if (t && beaconEl && !reachedRef.current) {
+              const c = map.getCenter();
+              const inRange = distKm({ lat: c.lat, lng: c.lng }, t) < 200; // "significant range"
+              beaconEl.style.display = inRange ? "" : "none";
+              if (inRange) {
+                const p = map.project([t.lng, t.lat]);
+                const box = map.getContainer();
+                const cx = box.clientWidth / 2;
+                const cy = box.clientHeight / 2;
+                if (Math.hypot(p.x - cx, p.y - cy) < 40) {   // ship "touches" beacon
+                  reachedRef.current = true;
+                  onReachRef.current?.();
+                }
+              }
             }
           flyRafRef.current = requestAnimationFrame(fly);
         };
@@ -348,14 +418,14 @@ useEffect(() => {
           </div>
         )}
 
-        <button
-          onClick={() => setShipMode((s) => !s)}
-          className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full border
-  border-white/10 bg-surface px-5 py-2 text-sm text-foreground backdrop-blur-md transition
-  hover:border-cyan/50"
-        >
-          {shipMode ? "Exit flight" : "🚀 Fly the globe"}
-        </button>
+         {!target && (
+          <button
+            onClick={() => setShipMode((s) => !s)}
+            className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-surface px-5 py-2 text-sm text-foreground backdrop-blur-md transition hover:border-cyan/50"
+          >
+            {shipMode ? "Exit flight" : "🚀 Fly the globe"}
+          </button>
+        )}
 
         {shipMode && (
           <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2

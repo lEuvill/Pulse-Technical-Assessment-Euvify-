@@ -25,7 +25,7 @@ export default function ChatPanel({
   onEndActivity,
   
 }: {
-  activities: { id: string; name: string; emoji: string; desc: string }[];
+  activities: { id: string; name: string; emoji: string; desc: string; featured?: boolean }[];
   activity:
     | { kind: "none" }
     | { kind: "inviting"; id: string }
@@ -113,11 +113,31 @@ export default function ChatPanel({
             </div>
           )}
 
-          {connected && activity.kind === "none" && (
+            {connected && activity.kind === "none" && (
             <div className="border-b border-zinc-800 p-3">
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Do something together</p>
+
+              {/* Featured / latest game */}
+              {activities.filter((a) => a.featured).map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => onInvite(a.id)}
+                    className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-xl border border-cyan/40 bg-gradient-to-r from-cyan/15 to-magenta/15 p-3 text-left transition hover:border-cyan"
+                  >
+                  <span className="absolute right-2 top-2 rounded-full bg-gradient-to-r from-cyan to-magenta px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-navy">
+                    New
+                  </span>
+                  <span className="text-2xl">{a.emoji}</span>
+                  <span>
+                    <span className="block text-sm font-semibold text-foreground">{a.name}</span>
+                    <span className="block text-[11px] text-muted">{a.desc}</span>
+                  </span>
+                </button>
+              ))}
+
+              {/* The rest */}
               <div className="flex gap-2 overflow-x-auto pb-1">
-                {activities.map((a) => (
+                {activities.filter((a) => !a.featured).map((a) => (
                   <button
                     key={a.id}
                     onClick={() => onInvite(a.id)}

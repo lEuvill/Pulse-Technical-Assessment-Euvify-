@@ -245,3 +245,35 @@
       from { opacity: 0.5; transform: scaleY(0.85); }
       to   { opacity: 1;   transform: scaleY(1.1); }
     }
+
+
+    .quest-beacon {
+      width: 12px;
+      height: 12px;
+      position: relative;
+    }
+    .quest-beacon::after { /* glowing base */
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: radial-gradient(circle, #fff, var(--color-cyan, #4FE3FF));
+      box-shadow: 0 0 16px 6px rgba(79, 227, 255, 0.85);
+    }
+    .quest-beacon::before { /* beam of light shooting up */
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 50%;
+      width: 6px;
+      height: 200px;
+      transform: translateX(-50%);
+      background: linear-gradient(to top, rgba(79,227,255,0.95), rgba(196,92,255,0.15) 65%, transparent);
+      border-radius: 9999px;
+      filter: blur(1px);
+      animation: beacon-pulse 1.3s ease-in-out infinite;
+    }
+    @keyframes beacon-pulse {
+      0%, 100% { opacity: 0.6; transform: translateX(-50%) scaleY(0.9); }
+      50%      { opacity: 1;   transform: translateX(-50%) scaleY(1.1); }
+    }

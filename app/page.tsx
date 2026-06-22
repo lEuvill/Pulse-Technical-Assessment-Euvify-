@@ -12,7 +12,7 @@ import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
 import type { ActivityAction } from "@/lib/webrtc";
 
-
+import CountryQuest from "./components/Games/CountryQuest";
 
 
 const ACTIVITIES = [
@@ -20,6 +20,7 @@ const ACTIVITIES = [
     { id: "wyr",    name: "Would You Rather", emoji: "🤔", desc: "Icebreaker" },
     { id: "20q",    name: "20 Questions",     emoji: "❓", desc: "Guessing game" },
     { id: "doodle", name: "Doodle Together",  emoji: "🎨", desc: "Shared canvas" },
+    { id: "country", name: "Find the Country", emoji: "🌍", desc: "Race to fly your ship there", featured: true },
   ];
 
 type Activity =
@@ -51,6 +52,18 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const COUNTRIES = [
+  { name: "Japan", lat: 36, lng: 138 }, { name: "Brazil", lat: -10, lng: -55 },
+  { name: "Egypt", lat: 26, lng: 30 }, { name: "Australia", lat: -25, lng: 133 },
+  { name: "Canada", lat: 56, lng: -106 }, { name: "India", lat: 22, lng: 79 },
+  { name: "France", lat: 46, lng: 2 }, { name: "USA", lat: 39, lng: -98 },
+  { name: "Nigeria", lat: 9, lng: 8 }, { name: "Argentina", lat: -38, lng: -63 },
+  { name: "China", lat: 35, lng: 103 }, { name: "Italy", lat: 42, lng: 12 },
+  { name: "Norway", lat: 62, lng: 10 }, { name: "Indonesia", lat: -2, lng: 118 },
+  { name: "South Africa", lat: -30, lng: 25 }, { name: "Mexico", lat: 23, lng: -102 },
+    ];
+  const [targetCountry, setTargetCountry] = useState<{ name: string; lat: number; lng: number } | null>(null);
+  const [questResult, setQuestResult] = useState<"won" | "lost" | null>(null);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
@@ -102,6 +115,8 @@ export default function Home() {
       peerRef.current?.sendActivity("end", a.id);
       setActivity({ kind: "none" });
       setGameMsg(null);
+      setTargetCountry(null);
+      setQuestResult(null);
     }
 
 
@@ -144,6 +159,8 @@ export default function Home() {
     setConn({ kind: "idle" });
     if (message) showNotice(message);
     setGameMsg(null);
+    setTargetCountry(null);
+    setQuestResult(null);
   }
 
   function startPeer(peerId: string, initiator: boolean) {
@@ -151,7 +168,12 @@ export default function Home() {
       onSignal: (type: DescType, payload: string) => {
         void sendSignal(sessionId, peerId, type, payload);
       },
-      onGame: (data) => setGameMsg(data),
+      onGame: (data) => {
+          setGameMsg(data);
+          const d = data as { country?: { name: string; lat: number; lng: number }; countryWin?: boolean };
+          if (d?.country) { setTargetCountry(d.country); setQuestResult(null); }
+          else if (d?.countryWin) setQuestResult((r) => r ?? "lost");
+        },
       onActivity: (action, id) => handleActivity(action, id),
       onChat: (text) => addMessage(false, text),
       onControl: (ctrl) => handleControl(ctrl),
@@ -385,6 +407,27 @@ export default function Home() {
     };
   }, [sessionId, phase]);
 
+   useEffect(() => {
+      if (activity.kind === "active" && activity.id === "country" && myMark === "X" && !targetCountry) {
+        const c = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)];
+        setTargetCountry(c);
+        setQuestResult(null);
+        peerRef.current?.sendGame({ country: c });
+      }
+    }, [activity, myMark, targetCountry]);
+
+  function handleReachTarget() {
+      if (questResult) return;
+      setQuestResult("won");
+      peerRef.current?.sendGame({ countryWin: true });
+    }
+  function newCountry() {
+    const c = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)];
+    setTargetCountry(c);
+    setQuestResult(null);
+    peerRef.current?.sendGame({ country: c });
+  }
+
   async function handleReady(lat: number, lng: number) {
     setMyLocation({ lat, lng });
     await join(sessionId, lat, lng);
@@ -407,12 +450,23 @@ export default function Home() {
             onClose={endActivity}
           />
         )}
+        {activity.kind === "active" && activity.id === "country" && (
+          <CountryQuest
+            country={targetCountry}
+            result={questResult}
+            isHost={myMark === "X"}
+            onPlayAgain={newCountry}
+            onClose={endActivity}
+          />
+        )}
       <WorldMap
         peers={peers}
         me={myLocation}
         onPeerClick={requestConnection}
         canConnect={conn.kind === "idle"}
         meBusy={conn.kind === "connecting" || conn.kind === "connected"}
+        target={activity.kind === "active" && activity.id === "country" ? targetCountry : null}
+          onReachTarget={handleReachTarget}
       />
 
       {notice && (
