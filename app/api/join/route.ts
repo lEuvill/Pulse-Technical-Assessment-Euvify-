@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { applyPrivacyOffset, isValidLatLng } from "@/lib/geo";
+import { newSecret, hashSecret } from "@/lib/session";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,21 +29,13 @@ export async function POST(request: NextRequest) {
 
   const offset = applyPrivacyOffset(lat as number, lng as number);
 
-  await prisma.presence.upsert({
-    where: { id },
-    create: {
-      id,
-      lat: offset.lat,
-      lng: offset.lng,
-      busy: false,
-      lastSeen: new Date(),
-    },
-    update: {
-      lat: offset.lat,
-      lng: offset.lng,
-      lastSeen: new Date(),
-    },
-  });
+  const secret = newSecret();
 
-  return Response.json({ ok: true });
+    await prisma.presence.upsert({
+      where: { id },
+      create: { id, secret: hashSecret(secret), lat: offset.lat, lng: offset.lng, busy: false, lastSeen: new Date() },
+      update: { secret: hashSecret(secret), lat: offset.lat, lng: offset.lng, lastSeen: new Date() },
+    });
+
+    return Response.json({ ok: true, secret });
 }

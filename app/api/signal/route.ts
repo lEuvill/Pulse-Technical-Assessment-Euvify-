@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { SignalType } from "@/lib/types";
-
+import { verifySecret } from "@/lib/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -28,10 +28,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "invalid body" }, { status: 400 });
   }
 
-  const { fromId, toId, type, payload } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const { fromId, toId, type, payload, secret } = (body ?? {}) as Record<string, unknown>;
 
   if (typeof fromId !== "string" || typeof toId !== "string") {
     return Response.json({ error: "invalid ids" }, { status: 400 });
@@ -49,7 +46,10 @@ export async function POST(request: NextRequest) {
 
   const signalType = type as SignalType;
   const payloadStr = typeof payload === "string" ? payload : null;
-
+ const sender = await prisma.presence.findUnique({ where: { id: fromId }, select: { secret: true } });
+    if (!sender || !verifySecret(typeof secret === "string" ? secret : null, sender.secret)) {
+      return Response.json({ error: "unauthorized" }, { status: 403 });
+    }
   // Enforce "one active connection at a time": if the target is already busy,
   // auto-decline the request instead of delivering it.
   if (signalType === "request") {
