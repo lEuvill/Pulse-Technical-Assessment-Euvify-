@@ -12,14 +12,15 @@ datasource db {
 }
 
 model Presence {
-  id       String   @id // client-generated session uuid
-  lat      Float // ALREADY privacy-offset coords (raw is never stored)
-  lng      Float
-  busy     Boolean  @default(false) // true while in an active connection
-  lastSeen DateTime
+    id       String   @id
+    secret   String   // hashed ephemeral session secret — deleted with the row
+    lat      Float
+    lng      Float
+    busy     Boolean  @default(false)
+    lastSeen DateTime
 
-  @@index([lastSeen])
-}
+    @@index([lastSeen])
+  }
 
 model Signal {
   // Mailbox for connection requests + WebRTC signaling only.

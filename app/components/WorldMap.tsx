@@ -22,9 +22,15 @@ export default function WorldMap({
   onPeerClick,
   canConnect,
   meBusy,
-    target,
-    onReachTarget,
+  target,
+  onReachTarget,
+  showBot,
+  onBotClick,
+  botPos,
 }: {
+  botPos?: { lat: number; lng: number } | null;
+  showBot?: boolean;
+  onBotClick?: () => void;
   target?: { name: string; lat: number; lng: number } | null;
   onReachTarget?: () => void;
   peers: PeerDot[];
@@ -33,6 +39,11 @@ export default function WorldMap({
   canConnect: boolean;
   meBusy: boolean;
 }) {
+  const botMarkerRef = useRef<Marker | null>(null);
+  const onBotClickRef = useRef(onBotClick);
+  useEffect(() => { onBotClickRef.current = onBotClick; });
+
+
   const targetRef = useRef(target);
   const onReachRef = useRef(onReachTarget);
   const reachedRef = useRef(false);
@@ -383,6 +394,30 @@ useEffect(() => {
         keys.clear();
       };
     }, [ready]);
+
+  useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      if (!showBot || !botPos) {
+        botMarkerRef.current?.remove();
+        botMarkerRef.current = null;
+        return;
+      }
+      if (botMarkerRef.current) return;
+      let cancelled = false;
+      (async () => {
+        const mapboxgl = (await import("mapbox-gl")).default;
+        if (cancelled) return;
+        const el = document.createElement("button");
+        el.className = "bot-dot";
+        el.title = "Chat with Pulse AI";
+        el.textContent = "🤖";
+        el.addEventListener("click", (e) => { e.stopPropagation(); onBotClickRef.current?.(); });
+        botMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([botPos.lng, botPos.lat]).addTo(map);
+      })();
+      return () => { cancelled = true; };
+    }, [showBot, botPos, ready]);
+
 
   return (
     <div className="absolute inset-0">

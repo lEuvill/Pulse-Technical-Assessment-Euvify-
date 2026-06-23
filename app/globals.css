@@ -277,3 +277,22 @@
       0%, 100% { opacity: 0.6; transform: translateX(-50%) scaleY(0.9); }
       50%      { opacity: 1;   transform: translateX(-50%) scaleY(1.1); }
     }
+
+
+    .bot-dot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 9999px;
+      background: radial-gradient(circle, #ffd27a, #ff9d4d);
+      box-shadow: 0 0 12px 4px rgba(255, 180, 90, 0.7);
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      animation: star-twinkle 2s ease-in-out infinite;
+      transition: transform 0.15s ease;
+    }
+    .bot-dot:hover { transform: scale(1.2); }

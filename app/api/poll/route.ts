@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { STALE_MS, SIGNAL_TTL_MS } from "@/lib/presence";
 import type { PollResponse } from "@/lib/types";
+import { verifySecret } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,73 +13,48 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const id = params.get("id");
+    if (!id) return Response.json({ error: "missing id" }, { status: 400 });
+    const secret = request.headers.get("x-pulse-secret");
 
-  if (!id) {
-    return Response.json({ error: "missing id" }, { status: 400 });
-  }
+    const now = Date.now();
+    const staleCutoff = new Date(now - STALE_MS);
+    const signalCutoff = new Date(now - SIGNAL_TTL_MS);
 
-  const now = Date.now();
-  const staleCutoff = new Date(now - STALE_MS);
-  const signalCutoff = new Date(now - SIGNAL_TTL_MS);
+    const self = await prisma.presence.findUnique({ where: { id }, select: { secret: true } });
+    const inCall = params.get("inCall") === "1";
+    const authed = !!self && verifySecret(secret, self.secret);
 
-  // 1) Heartbeat — refresh lastSeen for the caller.
-  // Also reconcile the busy
-  // flag: the client is the source of truth for "am I in a connection", so if
-  // it reports it is NOT in a call, clear any stale busy (self-heals a busy
-  // flag left stuck by a missed end / tab close / server restart).
-  const inCall = params.get("inCall") === "1";
-  const heartbeat = await prisma.presence.updateMany({
-    where: { id },
-    data: inCall
-      ? { lastSeen: new Date(now)}
-      : { lastSeen: new Date(now), busy: false },
-  });
+    if (authed) {
+      await prisma.presence.updateMany({
+        where: { id },
+        data: inCall ? { lastSeen: new Date(now) } : { lastSeen: new Date(now), busy: false },
+      });
+    }
 
-  const present = heartbeat.count > 0;
+    await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
+    await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
 
-  // 2) Reap stale presence rows and orphaned signals (independent deletes —
-  // no atomicity needed, and avoids transactions over a PgBouncer pooler).
-  await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
-  await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
-
-  // 3) Online peers, excluding self.
-  const peers = await prisma.presence.findMany({
-    where: {
-      id: { not: id },
-      lastSeen: { gte: staleCutoff },
-    },
-    select: { id: true, lat: true, lng: true, busy: true },
-  });
-
-  // 4) Drain this user's mailbox: read, then delete exactly what we read so a
-  // concurrently-inserted signal is never lost.
-  const inbox = await prisma.signal.findMany({
-    where: { toId: id },
-    orderBy: { createdAt: "asc" },
-  });
-  if (inbox.length > 0) {
-    await prisma.signal.deleteMany({
-      where: { id: { in: inbox.map((s) => s.id) } },
+    const peers = await prisma.presence.findMany({
+      where: { id: { not: id }, lastSeen: { gte: staleCutoff } },
+      select: { id: true, lat: true, lng: true, busy: true },
     });
-  }
 
-  const response: PollResponse = {
-    present,
-    peers: peers.map((p) => ({
-      id: p.id,
-      lat: p.lat,
-      lng: p.lng,
-      busy: p.busy,
-    })),
-    signals: inbox.map((s) => ({
-      id: s.id,
-      fromId: s.fromId,
-      toId: s.toId,
-      type: s.type as PollResponse["signals"][number]["type"],
-      payload: s.payload,
-      createdAt: s.createdAt.toISOString(),
-    })),
-  };
+    let inbox: { id: string; fromId: string; toId: string; type: string; payload: string | null; createdAt: Date }[] = [];
+    if (authed) {
+      inbox = await prisma.signal.findMany({ where: { toId: id }, orderBy: { createdAt: "asc" } });
+      if (inbox.length > 0) {
+        await prisma.signal.deleteMany({ where: { id: { in: inbox.map((s) => s.id) } } });
+      }
+    }
 
-  return Response.json(response);
+    const response: PollResponse = {
+      present: authed,
+      peers: peers.map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, busy: p.busy })),
+      signals: inbox.map((s) => ({
+        id: s.id, fromId: s.fromId, toId: s.toId,
+        type: s.type as PollResponse["signals"][number]["type"],
+        payload: s.payload, createdAt: s.createdAt.toISOString(),
+      })),
+    };
+    return Response.json(response);
 }
