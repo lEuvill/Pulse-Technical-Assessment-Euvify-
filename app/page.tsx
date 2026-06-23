@@ -6,14 +6,14 @@ import WorldMap from "./components/WorldMap";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
-import { join, leave, poll, sendSignal } from "@/lib/api";
+import { join, leave, poll, sendSignal, askBot } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
 import type { ActivityAction } from "@/lib/webrtc";
-
+import BotChat from "./components/BotChat";
 import CountryQuest from "./components/Games/CountryQuest";
-
+import { applyPrivacyOffset } from "@/lib/geo";
 
 const ACTIVITIES = [
     { id: "ttt",    name: "Tic-Tac-Toe",      emoji: "⭕", desc: "Quick game" },
@@ -43,6 +43,8 @@ type VideoState = "none" | "requesting" | "incoming" | "active";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export default function Home() {
+  const [botPos, setBotPos] = useState<{ lat: number; lng: number } | null>(null);
+  const BOT_ENABLED = process.env.NEXT_PUBLIC_BOT_ENABLED === "true";
   const [gameMsg, setGameMsg] = useState<unknown>(null);
   const [myMark, setMyMark] = useState<"X" | "O">("X");
   const [phase, setPhase] = useState<"gate" | "live">("gate");
@@ -64,13 +66,36 @@ export default function Home() {
     ];
   const [targetCountry, setTargetCountry] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [questResult, setQuestResult] = useState<"won" | "lost" | null>(null);
-  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
-    null,
-  );
+  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null,);
 
   const [activity, _setActivity] = useState<Activity>({ kind: "none" });
   const activityRef = useRef<Activity>(activity);
   const setActivity = (a: Activity) => { activityRef.current = a; _setActivity(a); };
+
+  const [botOpen, setBotOpen] = useState(false);
+  const [botMessages, setBotMessages] = useState<ChatMessage[]>([]);
+  const botMsgId = useRef(0);
+
+ function openBot() {
+      setBotOpen(true);
+      if (botMessages.length === 0) {
+        setBotMessages([{ id: botMsgId.current++, mine: false, text: "Hey! I'm Pulse AI 👋 The globe's quiet right now — want to chat?" }]);
+      }
+    }
+     async function sendToBot(text: string) {
+        const userMsg = { id: botMsgId.current++, mine: true, text };
+        const history = [...botMessages, userMsg];
+        setBotMessages(history);
+        try {
+          const reply = await askBot(
+            history.map((m) => ({ role: m.mine ? ("user" as const) : ("model" as const), text: m.text })),
+            botPos ?? undefined,
+          );
+          setBotMessages((prev) => [...prev, { id: botMsgId.current++, mine: false, text: reply }]); 
+        } catch {
+          setBotMessages((prev) => [...prev, { id: botMsgId.current++, mine: false, text: "(Pulse AI is offline right now.)" }]);
+        }
+      }
 
   function handleActivity(action: ActivityAction, id: string) {
       switch (action) {
@@ -430,6 +455,7 @@ export default function Home() {
 
   async function handleReady(lat: number, lng: number) {
     setMyLocation({ lat, lng });
+    setBotPos(applyPrivacyOffset(lat, lng));
     await join(sessionId, lat, lng);
     setPhase("live");
   }
@@ -442,6 +468,9 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 overflow-hidden">
+      {botOpen && (
+          <BotChat messages={botMessages} onSend={sendToBot} onClose={() => setBotOpen(false)} />
+        )}
       {activity.kind === "active" && activity.id === "ttt" && (
           <TicTacToe
             send={(d) => peerRef.current?.sendGame(d)}
@@ -460,6 +489,9 @@ export default function Home() {
           />
         )}
       <WorldMap
+        showBot={BOT_ENABLED && conn.kind === "idle" && !botOpen}
+        onBotClick={openBot}
+        botPos={botPos}
         peers={peers}
         me={myLocation}
         onPeerClick={requestConnection}
