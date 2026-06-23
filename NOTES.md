@@ -252,6 +252,25 @@
       ▎app/globals.css: .quest-beacon (glowing base + pulsing light beam) and its keyframe.
 
 
+> Feature III:
 
+    - Idea: A connection app feels dead when the globe is empty. Pulse AI is an optional companion a stranger-like 🤖 dot that sits 1–3 km from you (like a real peer) whenever you're free, so there's always someone to talk to. It's location-aware, so it chats with local flavor.
 
+    - Added/changes:
 
+      ▎ - app/api/bot/route.ts (new): server-side Gemini proxy — the API key stays server-only. Builds a location-aware system prompt from the (privacy-blurred) coords, strips leading non-user turns (Gemini requires the first message to be user, so the displayed greeting isn't sent first), caps history/length, and degrades gracefully (no GEMINI_API_KEY → 503). Nothing is stored.
+
+      ▎ - lib/api.ts: askBot(messages, location) with a client-side throttle — a serial queue (no parallel bursts), ~12.5 req/min pacing, and exponential backoff (1s→2s→4s) on 429s, to stay under the free-tier limit.
+
+      ▎ - app/components/BotChat.tsx (new): the Pulse AI chat panel with a clear disclaimer that AI chat is processed by Gemini (and the approximate area is shared) — not private peer-to-peer.
+
+      ▎ - app/components/WorldMap.tsx: a distinct amber 🤖 bot-dot rendered at botPos, shown while idle.
+
+      ▎ - app/page.tsx: bot state + handlers; computes botPos via applyPrivacyOffset (the 1–3 km offset) and forwards the blurred location to the AI.
+
+      ▎ - app/globals.css: .bot-dot styling.
+      
+  `Trade-offs` :
+        ▎ - External service: Gemini is an external dependency, but it's optional and degrades gracefully (no key → no bot, core app untouched) — keeps the "no external services required" rule.
+        ▎ - Privacy: it's the one server-mediated, non-P2P chat transparently labeled, never stored, and only the privacy-blurred area (not exact location) is shared for local context.
+        ▎ - Rate limiting: throttling is client-side for now; a shared-key server-side limiter is the broader fix (noted as the Phase 3 #4 trade-off).
