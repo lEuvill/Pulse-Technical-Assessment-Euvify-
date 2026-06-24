@@ -15,12 +15,12 @@ import BotChat from "./components/BotChat";
 import CountryQuest from "./components/Games/CountryQuest";
 import { applyPrivacyOffset } from "@/lib/geo";
 
-const ACTIVITIES = [
+  const ACTIVITIES = [
+    { id: "country", name: "Find the Country", emoji: "🌍", desc: "Race to fly there", featured: true },
     { id: "ttt",    name: "Tic-Tac-Toe",      emoji: "⭕", desc: "Quick game" },
-    { id: "wyr",    name: "Would You Rather", emoji: "🤔", desc: "Icebreaker" },
-    { id: "20q",    name: "20 Questions",     emoji: "❓", desc: "Guessing game" },
-    { id: "doodle", name: "Doodle Together",  emoji: "🎨", desc: "Shared canvas" },
-    { id: "country", name: "Find the Country", emoji: "🌍", desc: "Race to fly your ship there", featured: true },
+    { id: "wyr",    name: "Would You Rather", emoji: "🤔", desc: "Icebreaker",     soon: true },
+    { id: "20q",    name: "20 Questions",     emoji: "❓", desc: "Guessing game",  soon: true },
+    { id: "doodle", name: "Doodle Together",  emoji: "🎨", desc: "Shared canvas",  soon: true },
   ];
 
 type Activity =

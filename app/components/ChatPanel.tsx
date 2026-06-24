@@ -25,7 +25,7 @@ export default function ChatPanel({
   onEndActivity,
   
 }: {
-  activities: { id: string; name: string; emoji: string; desc: string; featured?: boolean }[];
+  activities: { id: string; name: string; emoji: string; desc: string; featured?: boolean; soon?: boolean }[];
   activity:
     | { kind: "none" }
     | { kind: "inviting"; id: string }
@@ -114,43 +114,46 @@ export default function ChatPanel({
           )}
 
             {connected && activity.kind === "none" && (
-            <div className="border-b border-zinc-800 p-3">
-              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Do something together</p>
+              <div className="border-b border-zinc-800 p-3">
+                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Do something together</p>
 
-              {/* Featured / latest game */}
-              {activities.filter((a) => a.featured).map((a) => (
+                {/* Featured / latest game */}
+                {activities.filter((a) => a.featured).map((a) => (
                   <button
                     key={a.id}
                     onClick={() => onInvite(a.id)}
                     className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-xl border border-cyan/40 bg-gradient-to-r from-cyan/15 to-magenta/15 p-3 text-left transition hover:border-cyan"
                   >
-                  <span className="absolute right-2 top-2 rounded-full bg-gradient-to-r from-cyan to-magenta px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-navy">
-                    New
-                  </span>
-                  <span className="text-2xl">{a.emoji}</span>
-                  <span>
-                    <span className="block text-sm font-semibold text-foreground">{a.name}</span>
-                    <span className="block text-[11px] text-muted">{a.desc}</span>
-                  </span>
-                </button>
-              ))}
-
-              {/* The rest */}
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {activities.filter((a) => !a.featured).map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => onInvite(a.id)}
-                    className="flex shrink-0 flex-col items-start rounded-xl border border-zinc-700 px-3 py-2 text-left transition hover:border-emerald-400/60"
-                  >
-                    <span className="text-lg">{a.emoji}</span>
-                    <span className="text-sm text-zinc-100">{a.name}</span>
-                    <span className="text-[10px] text-zinc-500">{a.desc}</span>
+                    <span className="absolute right-2 top-2 rounded-full bg-gradient-to-r from-cyan to-magenta px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-navy">
+                      New
+                    </span>
+                    <span className="text-2xl">{a.emoji}</span>
+                    <span>
+                      <span className="block text-sm font-semibold text-foreground">{a.name}</span>
+                      <span className="block text-[11px] text-muted">{a.desc}</span>
+                    </span>
                   </button>
                 ))}
+
+                {/* The rest (with "coming soon" disabled) */}
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {activities.filter((a) => !a.featured).map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => !a.soon && onInvite(a.id)}
+                      disabled={a.soon}
+                      className={`flex shrink-0 flex-col items-start rounded-xl border px-3 py-2 text-left transition ${
+                        a.soon ? "cursor-default border-zinc-800 opacity-50" : "border-zinc-700 hover:border-emerald-400/60"
+                      }`}
+                    >
+                      <span className="text-lg">{a.emoji}</span>
+                      <span className="text-sm text-zinc-100">{a.name}</span>
+                      <span className="text-[10px] text-zinc-500">{a.soon ? "Coming soon" : a.desc}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="mt-8 text-center text-sm text-zinc-500">
