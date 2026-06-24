@@ -14,6 +14,7 @@ import type { ActivityAction } from "@/lib/webrtc";
 import BotChat from "./components/BotChat";
 import CountryQuest from "./components/Games/CountryQuest";
 import { applyPrivacyOffset } from "@/lib/geo";
+import RequestInbox from "./components/RequestInbox";
 
   const ACTIVITIES = [
     { id: "country", name: "Find the Country", emoji: "🌍", desc: "Race to fly there", featured: true },
@@ -43,6 +44,13 @@ type VideoState = "none" | "requesting" | "incoming" | "active";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export default function Home() {
+  const [requests, _setRequests] = useState<string[]>([]);
+  const requestsRef = useRef<string[]>([]);
+  const setRequests = (updater: string[] | ((prev: string[]) => string[])) => {
+  const next = typeof updater === "function" ? updater(requestsRef.current) : updater;
+  requestsRef.current = next;
+  _setRequests(next);
+  };
   const [botPos, setBotPos] = useState<{ lat: number; lng: number } | null>(null);
   const BOT_ENABLED = process.env.NEXT_PUBLIC_BOT_ENABLED === "true";
   const [gameMsg, setGameMsg] = useState<unknown>(null);
@@ -250,19 +258,11 @@ export default function Home() {
     }
   }
 
+  
   function requestConnection(peerId: string) {
     if (connRef.current.kind !== "idle") return;
     setConn({ kind: "requesting", peerId });
     void sendSignal(sessionId, peerId, "request");
-    requestTimer.current = setTimeout(() => {
-      if (
-        connRef.current.kind === "requesting" &&
-        connRef.current.peerId === peerId
-      ) {
-        void sendSignal(sessionId, peerId, "end");
-        teardown("No answer.");
-      }
-    }, REQUEST_TIMEOUT_MS);
   }
 
   function cancelRequest() {
@@ -272,20 +272,20 @@ export default function Home() {
     teardown();
   }
 
-  function acceptIncoming() {
-    if (connRef.current.kind !== "incoming") return;
-    const peerId = connRef.current.peerId;
+  function acceptRequest(peerId: string) {
+    if (connRef.current.kind !== "idle") return;
+    // decline the rest
+    requestsRef.current.forEach((id) => { if (id !== peerId) void sendSignal(sessionId, id, "decline"); });
+    setRequests([]);
     startPeer(peerId, false);
     void sendSignal(sessionId, peerId, "accept");
     setConn({ kind: "connecting", peerId });
   }
 
-  function declineIncoming() {
-    if (connRef.current.kind !== "incoming") return;
-    void sendSignal(sessionId, connRef.current.peerId, "decline");
-    setConn({ kind: "idle" });
+  function declineRequest(peerId: string) {
+    void sendSignal(sessionId, peerId, "decline");
+    setRequests((prev) => prev.filter((id) => id !== peerId));
   }
-
   function endConnection() {
     const c = connRef.current;
     if (c.kind === "connecting" || c.kind === "connected") {
@@ -333,13 +333,10 @@ export default function Home() {
   function processSignal(sig: SignalMsg) {
     switch (sig.type) {
       case "request": {
-        if (connRef.current.kind === "idle") {
-          setConn({ kind: "incoming", peerId: sig.fromId });
-        } else {
-          void sendSignal(sessionId, sig.fromId, "decline");
+          const from = sig.fromId;
+          setRequests((prev) => (prev.includes(from) ? prev : [...prev, from]));
+          break;
         }
-        break;
-      }
       case "accept": {
         const c = connRef.current;
         if (c.kind === "requesting" && c.peerId === sig.fromId) {
@@ -372,15 +369,10 @@ export default function Home() {
         break;
       }
       case "end": {
+        setRequests((prev) => prev.filter((id) => id !== sig.fromId)); // inviter canceled → drop from inbox
         const c = connRef.current;
-        if (
-          (c.kind === "incoming" ||
-            c.kind === "connecting" ||
-            c.kind === "connected") &&
-          c.peerId === sig.fromId
-        ) {
-          if (c.kind === "incoming") setConn({ kind: "idle" });
-          else teardown("Stranger disconnected.");
+        if ((c.kind === "connecting" || c.kind === "connected") && c.peerId === sig.fromId) {
+          teardown("Stranger disconnected.");
         }
         break;
       }
@@ -409,6 +401,7 @@ export default function Home() {
             await join(sessionId, myLocation.lat, myLocation.lng);
           }
         setPeers(data.peers);
+        setRequests((prev) => prev.filter((id) => data.peers.some((p) => p.id === id)));
         for (const s of data.signals) processSignalRef.current(s);
       } catch {}
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
@@ -519,15 +512,9 @@ export default function Home() {
         </div>
       )}
 
-      {conn.kind === "incoming" && (
-        <ConnectionPrompt
-          title="A stranger wants to connect"
-          acceptLabel="Accept"
-          declineLabel="Decline"
-          onAccept={acceptIncoming}
-          onDecline={declineIncoming}
-        />
-      )}
+      
+        <RequestInbox requests={requests} onAccept={acceptRequest} onDecline={declineRequest} />
+      
 
       {inChat && (
         <ChatPanel
