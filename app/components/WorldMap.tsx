@@ -65,9 +65,12 @@ export default function WorldMap({
   const spinRafRef = useRef<number | null>(null);
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
-  const [skinId, setSkinId] = useState("midnight");
+  const [skinId, setSkinId] = useState("neon");
   const firstSkin = useRef(true);
+  const [labelsHidden, setLabelsHidden] = useState(true);
+  const labelsHiddenRef = useRef(false);
 
+  useEffect(() => { labelsHiddenRef.current = labelsHidden; }, [labelsHidden]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -104,6 +107,16 @@ export default function WorldMap({
     const x = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(x));
   }
+
+  function setLabels(map: MapboxMap, hidden: boolean) {
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.type === "symbol") {
+        try {
+          map.setLayoutProperty(layer.id, "visibility", hidden ? "none" : "visible");
+        } catch {}
+      }
+    }
+  }
   
   function applyGlobeAtmosphere(map: MapboxMap) {
     map.setProjection("globe");
@@ -136,10 +149,10 @@ export default function WorldMap({
         mapboxgl.accessToken = TOKEN;
         const map = new mapboxgl.Map({
           container: containerRef.current,
-          style: "mapbox://styles/mapbox/dark-v11",
+          style: "mapbox://styles/mapbox/navigation-night-v1",
           projection: "globe", // 3D globe instead of a flat map
           center: me ? [me.lng, me.lat] : [0, 20],
-          zoom: me ? 2.8 : 1.3,
+          zoom: me ? 1.8 : 1.3,
           attributionControl: true,
         });
         mapRef.current = map;
@@ -182,8 +195,10 @@ export default function WorldMap({
 
           // Re-apply globe projection + atmosphere on EVERY style load — the
           // initial one AND after a skin change (setStyle resets fog/projection).
-          map.on("style.load", () => {
-            if (!cancelled) applyGlobeAtmosphere(map);
+           map.on("style.load", () => {
+            if (cancelled) return;
+            applyGlobeAtmosphere(map);
+            setLabels(map, labelsHiddenRef.current);   // ← keep label choice across skin changes
           });
           map.on("load", () => {
             if (!cancelled) setReady(true);
@@ -205,6 +220,13 @@ export default function WorldMap({
     // `me` is only read for the initial center; we don't want to re-init on change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+   useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !ready) return;
+      setLabels(map, labelsHidden);
+    }, [labelsHidden, ready]);
+
 
   useEffect(() => {
       const map = mapRef.current;
@@ -470,28 +492,34 @@ useEffect(() => {
         )}
       <div ref={containerRef} className="h-full w-full bg-void" />
       {/* Skin selector */}
-        <details className="group absolute left-4 top-4 z-20">
-          <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border
-  border-white/10 bg-surface px-4 py-2 text-sm text-foreground backdrop-blur-md [&::-webkit-details-marker]:hidden">
-            <span className="h-2 w-2 rounded-full bg-cyan" />
-            Skin
-          </summary>
-          <div className="mt-2 flex w-44 flex-col gap-1 rounded-2xl border border-white/10 bg-surface p-2
-  backdrop-blur-md">
-            {SKINS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSkinId(s.id)}
-                className={`rounded-lg px-3 py-1.5 text-left text-sm transition hover:bg-white/10 ${
-                  skinId === s.id ? "text-cyan" : "text-muted"
-                }`}
-              >
-                {s.name}
-              </button>
-            ))}
-            
-          </div>
-        </details>
+         <details open className="group absolute left-4 top-4 z-20">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-white/10 bg-surface px-4 py-2 text-sm text-foreground backdrop-blur-md [&::-webkit-details-marker]:hidden">
+              <span className="h-2 w-2 rounded-full bg-cyan" />
+              Skin
+            </summary>
+            <div className="mt-2 flex w-44 flex-col gap-1 rounded-2xl border border-white/10 bg-surface p-2 backdrop-blur-md">
+              {SKINS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSkinId(s.id)}
+                  className={`rounded-lg px-3 py-1.5 text-left text-sm transition hover:bg-white/10 ${
+                    skinId === s.id ? "text-cyan" : "text-muted"
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+
+              <div className="mt-1 border-t border-white/10 pt-1">
+                <button
+                  onClick={() => setLabelsHidden((v) => !v)}
+                  className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-muted transition hover:bg-white/10"
+                >
+                  {labelsHidden ? "🏷️ Show labels" : "🏷️ Hide labels"}
+                </button>
+              </div>
+            </div>
+          </details>
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
           <p className="max-w-md rounded-lg bg-zinc-800 p-4 text-sm text-zinc-200">
